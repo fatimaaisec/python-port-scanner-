@@ -1,7 +1,7 @@
 import socket
+import threading
 from datetime import datetime
 
-# Common ports and services
 COMMON_PORTS = {
     20: "FTP Data",
     21: "FTP",
@@ -17,59 +17,68 @@ COMMON_PORTS = {
     8080: "HTTP Proxy"
 }
 
+open_ports = []
+lock = threading.Lock()
 
-def scan_ports(target):
+
+def scan_port(ip, port):
+    try:
+        scanner = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        scanner.settimeout(0.5)
+
+        result = scanner.connect_ex((ip, port))
+
+        if result == 0:
+            service = COMMON_PORTS.get(port, "Unknown Service")
+
+            with lock:
+                print(f"[OPEN] Port {port} - {service}")
+                open_ports.append((port, service))
+
+        scanner.close()
+
+    except:
+        pass
+
+
+def scan_target(target):
     print("\n" + "=" * 50)
     print(f"Scanning Target: {target}")
     print(f"Started at: {datetime.now()}")
     print("=" * 50)
 
-    open_ports = []
-
     try:
         ip = socket.gethostbyname(target)
 
+        threads = []
+
         for port in range(1, 1025):
-            scanner = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            scanner.settimeout(0.3)
+            t = threading.Thread(target=scan_port, args=(ip, port))
+            threads.append(t)
+            t.start()
 
-            result = scanner.connect_ex((ip, port))
-
-            if result == 0:
-                service = COMMON_PORTS.get(port, "Unknown Service")
-
-                print(f"[OPEN] Port {port} - {service}")
-                open_ports.append((port, service))
-
-            scanner.close()
+        for t in threads:
+            t.join()
 
     except socket.gaierror:
-        print("Invalid target or hostname.")
+        print("Invalid target hostname.")
 
-    except KeyboardInterrupt:
-        print("\nScan stopped by user.")
-
-    except Exception as error:
-        print("Error:", error)
-
-    save_results(target, open_ports)
-
-    print("\nScan Completed.")
+    print("\nScan completed.")
+    save_results(target)
 
 
-def save_results(target, open_ports):
+def save_results(target):
     filename = f"scan_results_{target}.txt"
 
     with open(filename, "w") as file:
-        file.write(f"Scan Results for {target}\n")
-        file.write("=" * 40 + "\n")
+        file.write("Open Ports:\n")
+        file.write("=" * 30 + "\n")
 
         for port, service in open_ports:
-            file.write(f"Port {port} - {service}\n")
+            file.write(f"{port} - {service}\n")
 
-    print(f"\nResults saved to: {filename}")
+    print(f"Results saved to {filename}")
 
 
 target = input("Enter target IP or website: ")
-
-scan_ports(target)
+scan_target(target)
